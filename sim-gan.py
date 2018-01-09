@@ -32,8 +32,8 @@ cache_dir = os.path.join(path, 'cache')
 # image dimensions
 #
 
-img_width = 100
-img_height = 100
+img_width = 224
+img_height = 224
 img_channels = 1
 
 #
@@ -50,7 +50,7 @@ log_interval = 1000
 def refiner_network(input_image_tensor):
    
 
-    def resnet_block(input_features, nb_features=64, nb_kernel_rows=3, nb_kernel_cols=3):
+    def resnet_block(input_features, nb_features=64, nb_kernel_rows=7, nb_kernel_cols=7):
         """
         A ResNet block with two `nb_kernel_rows` x `nb_kernel_cols` convolutional layers,
         each with `nb_features` feature maps.
@@ -70,7 +70,7 @@ def refiner_network(input_image_tensor):
     x = layers.Convolution2D(64, 3, 3, border_mode='same', activation='relu')(input_image_tensor)
 
     # the output is passed through 4 ResNet blocks
-    for _ in range(4):
+    for _ in range(10):
         x = resnet_block(x)
 
     return layers.Convolution2D(img_channels, 1, 1, border_mode='same', activation='tanh')(x)
@@ -89,6 +89,18 @@ def discriminator_network(input_image_tensor):
     # and the custom loss function is then `tf.nn.sparse_softmax_cross_entropy_with_logits`
     return layers.Reshape((-1, 2))(x)
 
+def discriminator_network_custom(input_image_tensor):
+
+    x = layers.Convolution2D(96, 7, 7, stride=4, border_mode='same', subsample=(2, 2), activation='relu')(input_image_tensor)
+    x = layers.Convolution2D(64, 5, 5, stride=2, border_mode='same', subsample=(2, 2), activation='relu')(x)
+    x = layers.MaxPooling2D(pool_size=(3, 3), border_mode='same', strides=(2, 2))(x)
+    x = layers.Convolution2D(32, 3, 3,  stride = 2, border_mode='same', subsample=(1, 1), activation='relu')(x)
+    x = layers.Convolution2D(32, 1, 1, border_mode='same', subsample=(1, 1), activation='relu')(x)
+    x = layers.Convolution2D(2, 1, 1, border_mode='same', subsample=(1, 1), activation='relu')(x)
+
+    # here one feature map corresponds to `is_real` and the other to `is_refined`,
+    # and the custom loss function is then `tf.nn.sparse_softmax_cross_entropy_with_logits`
+    return layers.Reshape((-1, 2))(x)
 
 def adversarial_training(synthesis_eyes_dir, mpii_gaze_dir, refiner_model_path=None, discriminator_model_path=None):
  
@@ -96,7 +108,7 @@ def adversarial_training(synthesis_eyes_dir, mpii_gaze_dir, refiner_model_path=N
     refined_image_tensor = refiner_network(synthetic_image_tensor)
 
     refined_or_real_image_tensor = layers.Input(shape=(img_height, img_width, img_channels))
-    discriminator_output = discriminator_network(refined_or_real_image_tensor)
+    discriminator_output = discriminator_network_custom(refined_or_real_image_tensor)
 
     #
     # define models
