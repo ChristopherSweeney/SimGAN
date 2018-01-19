@@ -32,8 +32,8 @@ cache_dir = os.path.join(path, 'cache')
 # image dimensions
 #
 
-img_width = 224
-img_height = 224
+img_width = 100
+img_height = 100
 img_channels = 1
 
 #
@@ -41,7 +41,7 @@ img_channels = 1
 #
 
 nb_steps = 10000 #low for now
-batch_size = 16
+batch_size = 8
 k_d = 1  # number of discriminator updates per step
 k_g = 2  # number of generative network updates per step
 log_interval = 1000
@@ -91,12 +91,12 @@ def discriminator_network(input_image_tensor):
 
 def discriminator_network_custom(input_image_tensor):
 
-    x = layers.Convolution2D(96, 7, 7, stride=4, border_mode='same', subsample=(2, 2), activation='relu')(input_image_tensor)
-    x = layers.Convolution2D(64, 5, 5, stride=2, border_mode='same', subsample=(2, 2), activation='relu')(x)
-    x = layers.MaxPooling2D(pool_size=(3, 3), border_mode='same', strides=(2, 2))(x)
-    x = layers.Convolution2D(32, 3, 3,  stride = 2, border_mode='same', subsample=(1, 1), activation='relu')(x)
-    x = layers.Convolution2D(32, 1, 1, border_mode='same', subsample=(1, 1), activation='relu')(x)
-    x = layers.Convolution2D(2, 1, 1, border_mode='same', subsample=(1, 1), activation='relu')(x)
+    x = layers.Convolution2D(96, (7, 7), strides=4, border_mode='same', activation='relu')(input_image_tensor)
+    x = layers.Convolution2D(64, (5, 5), strides=2, border_mode='same', activation='relu')(x)
+    x = layers.MaxPooling2D(pool_size=(3, 3),strides=2, border_mode='same')(x)
+    x = layers.Convolution2D(32, (3, 3),  strides = 2, border_mode='same', activation='relu')(x)
+    x = layers.Convolution2D(32, (1, 1), strides = 2, border_mode='same', activation='relu')(x)
+    x = layers.Convolution2D(2, (1, 1), strides = 2,border_mode='same', activation='relu')(x)
 
     # here one feature map corresponds to `is_real` and the other to `is_refined`,
     # and the custom loss function is then `tf.nn.sparse_softmax_cross_entropy_with_logits`
@@ -108,7 +108,7 @@ def adversarial_training(synthesis_eyes_dir, mpii_gaze_dir, refiner_model_path=N
     refined_image_tensor = refiner_network(synthetic_image_tensor)
 
     refined_or_real_image_tensor = layers.Input(shape=(img_height, img_width, img_channels))
-    discriminator_output = discriminator_network_custom(refined_or_real_image_tensor)
+    discriminator_output = discriminator_network(refined_or_real_image_tensor)
 
     #
     # define models
@@ -169,7 +169,8 @@ def adversarial_training(synthesis_eyes_dir, mpii_gaze_dir, refiner_model_path=N
     #normalize to 1??????
 
     datagen = image.ImageDataGenerator(
-        preprocessing_function=applications.xception.preprocess_input,
+       # preprocessing_function=applications.xception.preprocess_input,
+       rescale = 1/1000.,
         data_format="channels_last")
 
     flow_from_directory_params = {'target_size': (img_height, img_width),
@@ -201,13 +202,12 @@ def adversarial_training(synthesis_eyes_dir, mpii_gaze_dir, refiner_model_path=N
     y_real = np.array([[[1.0, 0.0]] * discriminator_model_output_shape[1]] * batch_size)
     y_refined = np.array([[[0.0, 1.0]] * discriminator_model_output_shape[1]] * batch_size)
     assert y_real.shape == (batch_size, discriminator_model_output_shape[1], 2)
-
-    print refiner_model_path +"hey"
+    print("here")
     if not refiner_model_path:
         print('pre-training the refiner network...')
         gen_loss = np.zeros(shape=len(refiner_model.metrics_names))
 
-        for i in range(1000):
+        for i in range(300):
             synthetic_image_batch = get_image_batch(synthetic_generator)
             gen_loss = np.add(refiner_model.train_on_batch(synthetic_image_batch, synthetic_image_batch), gen_loss)
             print(i)
@@ -266,11 +266,8 @@ def adversarial_training(synthesis_eyes_dir, mpii_gaze_dir, refiner_model_path=N
             # sample a mini-batch of synthetic images
             synthetic_image_batch = get_image_batch(synthetic_generator)
 
-            plt.imshow(np.reshape(synthetic_image_batch[0],(100,100)))
-            plt.show()
 
-            combined_loss = np.add(combined_model.train_on_batch(synthetic_image_batch,
-                                                                 [synthetic_image_batch, y_real]), combined_loss)
+            combined_loss = np.add(combined_model.train_on_batch(synthetic_image_batch,[synthetic_image_batch, y_real]), combined_loss)
 
         for _ in range(k_d):
             # sample a mini-batch of synthetic and real images
@@ -326,4 +323,5 @@ def main(synthesis_eyes_dir, mpii_gaze_dir, refiner_model_path, discriminator_mo
 if __name__ == '__main__':
     # TODO: if pre-trained models are passed in, we don't take the steps they've been trained for into account
 
-    main(sys.argv[1], sys.argv[2],sys.argv[3] ,sys.argv[4])
+    main(sys.argv[1], sys.argv[2],"/home/drc/Chris/SimGAN/cache/refiner_model_pre_trained.h5" ,"/home/drc/Chris/SimGAN/cache/discriminator_model_pre_trained.h5")
+
