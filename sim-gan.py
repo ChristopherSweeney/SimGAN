@@ -41,16 +41,16 @@ img_channels = 1
 #
 
 nb_steps = 10000 #low for now
-batch_size = 8
+batch_size = 4
 k_d = 1  # number of discriminator updates per step
 k_g = 2  # number of generative network updates per step
-log_interval = 1000
+log_interval = 500
 
 
 def refiner_network(input_image_tensor):
    
 
-    def resnet_block(input_features, nb_features=64, nb_kernel_rows=7, nb_kernel_cols=7):
+    def resnet_block(input_features, nb_features=64, nb_kernel_rows=3, nb_kernel_cols=3):
         """
         A ResNet block with two `nb_kernel_rows` x `nb_kernel_cols` convolutional layers,
         each with `nb_features` feature maps.
@@ -70,7 +70,7 @@ def refiner_network(input_image_tensor):
     x = layers.Convolution2D(64, (3, 3), padding='same', activation='relu')(input_image_tensor)
 
     # the output is passed through 4 ResNet blocks
-    for _ in range(10):
+    for _ in range(3):
         x = resnet_block(x)
 
     return layers.Convolution2D(img_channels, (1, 1), padding='same', activation='tanh')(x)
@@ -207,10 +207,8 @@ def adversarial_training(synthesis_eyes_dir, mpii_gaze_dir, refiner_model_path=N
         print('pre-training the refiner network...')
         gen_loss = np.zeros(shape=len(refiner_model.metrics_names))
 
-        for i in range(1000):
+        for i in range(500):
             synthetic_image_batch = get_image_batch(synthetic_generator)
-            #plt.imshow(np.reshape(synthetic_image_batch[0],(480,640)))
-           # plt.show()
             gen_loss = np.add(refiner_model.train_on_batch(synthetic_image_batch, synthetic_image_batch), gen_loss)
             # log every `log_interval` steps
             print i
@@ -237,10 +235,9 @@ def adversarial_training(synthesis_eyes_dir, mpii_gaze_dir, refiner_model_path=N
         print('pre-training the discriminator network...')
         disc_loss = np.zeros(shape=len(discriminator_model.metrics_names))
 
-        for _ in range(100):
+        for _ in range(200):
             real_image_batch = get_image_batch(real_generator)
             disc_loss = np.add(discriminator_model.train_on_batch(real_image_batch, y_real), disc_loss)
-
             synthetic_image_batch = get_image_batch(synthetic_generator)
             refined_image_batch = refiner_model.predict_on_batch(synthetic_image_batch)
             disc_loss = np.add(discriminator_model.train_on_batch(refined_image_batch, y_refined), disc_loss)
@@ -301,7 +298,7 @@ def adversarial_training(synthesis_eyes_dir, mpii_gaze_dir, refiner_model_path=N
                 os.path.join(cache_dir, figure_name),
                 label_batch=['Synthetic'] * batch_size + ['Refined'] * batch_size)
 
-            #plt.imshow(np.reshape(refiner_model.predict_on_batch(synthetic_image_batch)[0],(100,100)))
+            #plt.imshow(np.reshape(refiner_model.predict_on_batch(synthetic_image_batch)[0],(224,224)))
             #plt.show()
             # log loss summary
             print('Refiner model loss: {}.'.format(combined_loss / (log_interval * k_g * 2)))
@@ -325,5 +322,4 @@ def main(synthesis_eyes_dir, mpii_gaze_dir, refiner_model_path, discriminator_mo
 if __name__ == '__main__':
     # TODO: if pre-trained models are passed in, we don't take the steps they've been trained for into account
 
-    main(sys.argv[1], sys.argv[2],None, None)
-
+    main(sys.argv[1], sys.argv[2],None,None)
